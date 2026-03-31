@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンケート提出状況確認システム</title>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #50C878; /* エメラルドグリーン */
+            --primary-gradient: linear-gradient(135deg, #50C878 0%, #2e8b57 100%);
+            --primary-light: #e6fffa;
+            --primary-dark: #2e8b57;
+            --gray-bg: #f5f7fa;
+            --border-color: #ddd;
+            --text-color: #333;
+            --shadow-card: 0 4px 20px rgba(0,0,0,0.05);
+        }
+
+        body {
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--gray-bg);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* アニメーション */
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ヘッダー */
+        header {
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 設定ボタン */
+        .settings-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #888;
+            transition: color 0.2s;
+        }
+        .settings-btn:hover { color: var(--primary-color); }
+        .settings-btn.hidden { display: none !important; }
+
+        /* メインコンテナ */
+        main {
+            flex: 1;
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+
+        /* 共通カードスタイル */
+        .card-panel {
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--shadow-card);
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        /* View 1: トップ画面 */
+        .hero-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: inline-block;
+            background: var(--primary-light);
+            padding: 30px;
+            border-radius: 50%;
+            color: var(--primary-dark);
+        }
+        .hero-title { font-size: 2.2rem; color: var(--primary-dark); margin-bottom: 15px; font-weight: bold; }
+        .hero-subtitle { font-size: 1.1rem; color: #666; margin-bottom: 40px; line-height: 1.6; }
+        
+        .btn-large {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 18px 60px;
+            font-size: 1.3rem;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(80, 200, 120, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .btn-large:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(80, 200, 120, 0.6); }
+
+        /* View 2: アップロード画面 */
+        .upload-area {
+            border: 3px dashed var(--primary-color);
+            background-color: #fafafa;
+            border-radius: 12px;
+            padding: 60px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .upload-area:hover { background-color: var(--primary-light); }
+        .upload-icon { font-size: 3rem; color: var(--primary-color); margin-bottom: 20px; }
+
+        /* View 3: 結果画面 */
+        .result-container {
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .tabs {
+            display: flex;
+            gap: 2px;
+            background: #f0f0f0;
+            padding: 10px 10px 0 10px;
+            border-bottom: 1px solid #ddd;
+            overflow-x: auto;
+        }
+        .tab-btn {
+            background-color: #e0e0e0;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .tab-btn:hover { background-color: #d0d0d0; }
+        .tab-btn.active {
+            background-color: white;
+            color: var(--primary-dark);
+            position: relative;
+        }
+        .tab-btn.active::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px;
+            background: var(--primary-color); border-radius: 8px 8px 0 0;
+        }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        th, td { padding: 14px 20px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: #fafafa; font-weight: bold; color: #555; white-space: nowrap; border-bottom: 2px solid #eee; }
+        tr:hover { background-color: #f9fffb; }
+        .status-badge {
+            display: inline-block; padding: 6px 14px; border-radius: 20px;
+            font-size: 0.85rem; font-weight: bold; text-align: center; min-width: 90px;
+        }
+        .status-done { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        .status-yet { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+        /* View 4: 設定画面 */
+        .settings-card { text-align: left; }
+        .settings-desc { font-size: 0.95rem; color: #666; margin-bottom: 20px; line-height: 1.5; }
+        .file-input-wrapper { margin-bottom: 30px; }
+        .btn-save {
+            background-color: var(--primary-color); color: white; border: none; padding: 10px 30px;
+            border-radius: 4px; font-size: 1rem; cursor: pointer;
+        }
+        .btn-cancel {
+            background-color: #ccc; color: white; border: none; padding: 10px 30px;
+            border-radius: 4px; font-size: 1rem; cursor: pointer; margin-right: 10px;
+        }
+
+        /* ユーティリティ */
+        .hidden { display: none !important; }
+        .btn-reset {
+            background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color);
+            padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: bold;
+        }
+        .btn-reset:hover { background: var(--primary-color); color: white; }
+        
+        /* ローディングオーバーレイ */
+        #loadingOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8); z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.5rem; color: var(--primary-dark); font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loadingOverlay">
+        <span id="loadingText">名簿データを同期中...</span>
+    </div>
+
+    <header>
+        <h1>
+            <span style="font-size:1.5rem;">📊</span> 
+            アンケート提出状況確認システム
+        </h1>
+        <div>
+            <button id="settingsBtn" class="settings-btn" onclick="goToSettings()" title="名簿更新設定">⚙️</button>
+            <button id="resetBtn" class="btn-reset hidden" onclick="goBackToTop()">最初に戻る</button>
+        </div>
+    </header>
+
+    <main>
+        <div id="viewTop" class="card-panel fade-in hidden">
+            <div class="hero-icon">📋</div>
+            <h2 class="hero-title">アンケート提出状況確認フォーム</h2>
+            <p class="hero-subtitle">
+                アンケート結果のExcelファイルを読み込んで、<br>
+                クラウド上の最新名簿と照らし合わせ、提出状況を判定します。
+            </p>
+            <button class="btn-large" onclick="goToUpload()">
+                アンケートを添付する
+            </button>
+            <p id="rosterStatus" style="margin-top:20px; color:#888; font-size:0.8rem;"></p>
+        </div>
+
+        <div id="viewUpload" class="card-panel hidden fade-in">
+            <h2 style="color: var(--primary-dark);">Excelファイルをアップロード</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                アンケート結果のExcelファイルをここにドロップしてください。
+            </p>
+            
+            <div class="upload-area">
+                <div class="upload-icon">📂</div>
+                <p>クリックしてファイルを選択<br>またはここにドロップ</p>
+            </div>
+            
+            <input type="file" id="surveyInput" accept=".xlsx, .xls" style="display: none;" onchange="handleSurveyUpload(this)">
+            <button class="btn-reset" style="margin-top: 20px;" onclick="goBackToTop()">キャンセル</button>
+        </div>
+
+        <div id="viewResult" class="hidden fade-in" style="width: 100%;">
+            
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px; margin-bottom: 10px;">
+                <div style="color: #666; font-size: 1rem;">
+                    クラス回答率: <span id="rateDisplay" style="font-weight: bold; color: var(--primary-dark);">-</span>
+                </div>
+                <button class="btn-save" style="font-size: 0.95rem; padding: 10px 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);" onclick="downloadResultXlsx()">
+                    📥 結果をExcelでダウンロード
+                </button>
+            </div>
+            <div class="result-container">
+                <div class="tabs" id="tabContainer"></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="5%">年</th>
+                                <th width="5%">組</th>
+                                <th width="5%">番</th>
+                                <th width="20%">氏名</th>
+                                <th width="15%">状態</th>
+                                <th width="40%">メールアドレス</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="viewSettings" class="card-panel settings-card hidden fade-in">
+            <h2 style="color: var(--primary-dark); border-bottom: 2px solid var(--primary-light); padding-bottom: 10px;">名簿データ更新設定</h2>
+            
+            <div class="settings-desc">
+                <p>ここで名簿ファイルをアップロードすると、<strong>クラウド上の名簿データが上書きされます。</strong><br>
+                この変更は、このフォームを使用する全てのユーザーに反映されます。</p>
+                <p>※ファイル形式: Excel (.xlsx)<br>
+                ※列の並び順: [年, 組, 番号, 氏名, メールアドレス]</p>
+            </div>
+
+            <div class="file-input-wrapper">
+                <label style="font-weight:bold; display:block; margin-bottom:10px;">新しい名簿Excelファイル:</label>
+                <input type="file" id="rosterInput" accept=".xlsx, .xls">
+            </div>
+
+            <div style="text-align: right;">
+                <button class="btn-cancel" onclick="goBackToTop()">キャンセル</button>
+                <button class="btn-save" onclick="saveNewRoster()">名簿を更新して保存</button>
+            </div>
+
+            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px dashed #ccc;">
+                <h3 style="font-size: 1rem; color: #d32f2f; margin-bottom: 10px;">⚠ 危険な操作</h3>
+                <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                    現在登録されている名簿データをクラウドから完全に削除します。<br>
+                    この操作は元に戻せません。
+                </p>
+                <button style="background-color: #fff; border: 1px solid #d32f2f; color: #d32f2f; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;" onmouseover="this.style.backgroundColor='#ffebee'" onmouseout="this.style.backgroundColor='#fff'" onclick="deleteCurrentRoster()">
+                    名簿データを削除する
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+        // 設定: Firebaseコンソールから取得した構成オブジェクトをここに貼り付けてください
+        // ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+        const firebaseConfig = {
+            apiKey: "AIzaSyBenTGnh4cDt7oiyBwxhQSNetNlUxC4ke0",
+            authDomain: "survey-status-checker.firebaseapp.com",
+            projectId: "survey-status-checker",
+            storageBucket: "survey-status-checker.firebasestorage.app",
+            messagingSenderId: "909607041772",
+            appId: "1:909607041772:web:62f22770cf0108005cc3c9"
+        };
+
+        // Firebase初期化
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            console.log("Firebase initialized");
+        } catch (e) {
+            console.error("Firebase init failed. Did you paste the config?", e);
+            alert("Firebaseの設定が完了していません。コード内の firebaseConfig を設定してください。");
+        }
+
+        // グローバル変数への公開（モジュール外から呼ぶため）
+        window.db = db;
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+
+        // アプリ起動時に名簿をロード
+        loadRosterFromCloud();
+    </script>
+
+    <script>
+        // ==========================================
+        // アプリケーションロジック
+        // ==========================================
+
+        // グローバル変数
+        let currentRosterData = []; // [ {year, classNum, no, name, email}, ... ]
+        let classRosterMap = {};    // { "1年1組": [...], ... }
+        let submittedEmails = new Set();
+        let currentTab = "";
+        let sortedClassList = []; // 自動生成されたクラスリスト
+
+        // ------------------------------------------
+        // Firebase 連携関数
+        // ------------------------------------------
+
+        // クラウドから名簿を取得
+        async function loadRosterFromCloud() {
+            if (!window.db) return; // Firebase未設定時
+
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.remove('hidden');
+
+            try {
+                const docRef = window.doc(window.db, "config", "roster");
+                const docSnap = await window.getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.students && Array.isArray(data.students)) {
+                        currentRosterData = data.students;
+                        processRosterData(currentRosterData);
+                        document.getElementById('rosterStatus').innerText = `現在、全${currentRosterData.length}名の名簿データが同期されています。`;
+                    }
+                } else {
+                    console.log("No roster found in cloud.");
+                    // データがない場合は初期データ(ここには空で定義)またはダミーを使う
+                    document.getElementById('rosterStatus').innerText = "名簿データがありません。設定からアップロードしてください。";
+                }
+            } catch (error) {
+                console.error("Error getting document:", error);
+                alert("データの取得に失敗しました。ネットワーク接続またはAPI設定を確認してください。");
+            } finally {
+                loading.classList.add('hidden');
+                // 初期画面表示
+                showView('viewTop');
+            }
+        }
+
+        // クラウドへ名簿を保存
+        async function saveRosterToCloud(rosterArray) {
+            if (!window.db) return;
+
+            const loading = document.getElementById('loadingOverlay');
+            document.getElementById('loadingText').textContent = "名簿を更新中...";
+            loading.classList.remove('hidden');
+
+            try {
+                await window.setDoc(window.doc(window.db, "config", "roster"), {
+                    students: rosterArray,
+                    updatedAt: new Date().toISOString()
+                });
+                alert("名簿の更新が完了しました。");
+                
+                // メモリ上のデータも更新
+                currentRosterData = rosterArray;
+                processRosterData(currentRosterData);
+                goBackToTop();
+
+            } catch (error) {
+                console.error("Error writing document:", error);
+                alert("保存に失敗しました: " + error.message);
+            } finally {
+                loading.classList.add('hidden');
+                document.getElementById('loadingText').textContent = "名簿データを同期中...";
+            }
+        }
+
+        // 名簿配列をマップに変換 & クラスリスト自動生成
+        function processRosterData(flatData) {
+            classRosterMap = {};
+            flatData.forEach(student => {
+                const className = `${student.year}年${student.classNum}組`;
+                if (!classRosterMap[className]) classRosterMap[className] = [];
+                classRosterMap[className].push(student);
+            });
+            
+            // クラス名を抽出してソートする（例: 1年1組, 1年2組... 3年1組...）
+            const classKeys = Object.keys(classRosterMap);
+            
+            sortedClassList = classKeys.sort((a, b) => {
+                // "〇年〇組" から数字を取り出して比較する
+                const extractNums = (str) => {
+                    const match = str.match(/(\d+)年(\d+)組/);
+                    if (match) {
+                        return { y: parseInt(match[1], 10), c: parseInt(match[2], 10) };
+                    }
+                    return { y: 0, c: 0 }; // マッチしない場合のフォールバック
+                };
+
+                const valA = extractNums(a);
+                const valB = extractNums(b);
+
+                // まず学年で比較
+                if (valA.y !== valB.y) {
+                    return valA.y - valB.y;
+                }
+                // 学年が同じなら組で比較
+                return valA.c - valB.c;
+            });
+
+            // タブ初期値設定（存在しないクラスが選択されていたらリセット）
+            if (!currentTab || !sortedClassList.includes(currentTab)) {
+                if (sortedClassList.length > 0) {
+                    currentTab = sortedClassList[0];
+                } else {
+                    currentTab = "";
+                }
+            }
+        }
+
+
+        // ------------------------------------------
+        // 画面遷移・UI操作
+        // ------------------------------------------
+
+        function showView(viewId) {
+            // 全非表示
+            ['viewTop', 'viewUpload', 'viewResult', 'viewSettings'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            
+            document.getElementById(viewId).classList.remove('hidden');
+
+            // ヘッダーボタン制御
+            const settingsBtn = document.getElementById('settingsBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            
+            if (viewId === 'viewTop') {
+                settingsBtn.classList.remove('hidden');
+                resetBtn.classList.add('hidden');
+            } else if (viewId === 'viewResult') {
+                settingsBtn.classList.add('hidden');
+                resetBtn.classList.remove('hidden');
+            } else {
+                settingsBtn.classList.add('hidden');
+                resetBtn.classList.add('hidden');
+            }
+        }
+
+        function goToUpload() { showView('viewUpload'); }
+        function goToSettings() { showView('viewSettings'); }
+        
+        function goBackToTop() {
+            document.getElementById('surveyInput').value = '';
+            document.getElementById('rosterInput').value = '';
+            submittedEmails.clear();
+            loadRosterFromCloud(); // 最新状態を確認しつつ戻る
+        }
+
+
+        // ------------------------------------------
+        // 名簿更新機能 (Settings)
+        // ------------------------------------------
+
+        function saveNewRoster() {
+            const fileInput = document.getElementById('rosterInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert("ファイルが選択されていません。");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    // 配列の配列として取得 (header:1)
+                    const jsonArr = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                    // データ変換処理 (列インデックス: 0=Year, 1=Class, 2=No, 3=Name, 4=Email と仮定)
+                    const newRoster = [];
+                    
+                    // 1行目から走査
+                    jsonArr.forEach(row => {
+                        // データ整合性チェック: 最低5列あり、年・組が数値または数値文字列であること
+                        if (row.length >= 5 && (row[0] || row[0]===0)) {
+                            // ヘッダー行("年"などの文字)を除外
+                            if (isNaN(row[0])) return; 
+
+                            newRoster.push({
+                                year: row[0],
+                                classNum: row[1],
+                                no: row[2],
+                                name: row[3],
+                                email: String(row[4]).trim()
+                            });
+                        }
+                    });
+
+                    if (newRoster.length === 0) {
+                        alert("有効な名簿データが見つかりませんでした。列の並び順を確認してください。");
+                        return;
+                    }
+
+                    if (confirm(`名簿データを更新しますか？\n（検出された人数: ${newRoster.length}名）`)) {
+                        saveRosterToCloud(newRoster);
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    alert("ファイルの読み込みに失敗しました。");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 名簿削除機能
+        async function deleteCurrentRoster() {
+            if (!confirm("【警告】\n名簿データを完全に削除します。\nこの操作を行うと、全てのユーザーの名簿データが消去されます。\n\n本当によろしいですか？")) {
+                return;
+            }
+
+            const loading = document.getElementById('loadingOverlay');
+            document.getElementById('loadingText').textContent = "名簿を削除中...";
+            loading.classList.remove('hidden');
+
+            try {
+                // Firestoreからドキュメントを削除
+                await window.deleteDoc(window.doc(window.db, "config", "roster"));
+
+                // メモリ上のデータをクリア
+                currentRosterData = [];
+                classRosterMap = {};
+                sortedClassList = [];
+                currentTab = "";
+
+                alert("名簿データを削除しました。");
+                goBackToTop();
+
+            } catch (error) {
+                console.error("Error deleting document:", error);
+                alert("削除に失敗しました: " + error.message);
+            } finally {
+                loading.classList.add('hidden');
+                document.getElementById('loadingText').textContent = "名簿データを同期中...";
+            }
+        }
+
+        // ------------------------------------------
+        // アンケート集計機能
+        // ------------------------------------------
+
+        // ドラッグ＆ドロップ設定
+        const uploadArea = document.querySelector('.upload-area');
+        uploadArea.addEventListener('click', () => document.getElementById('surveyInput').click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#e6fffa';
+        });
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#fafafa';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#fafafa';
+            if (e.dataTransfer.files.length > 0) {
+                handleSurveyUpload({ files: e.dataTransfer.files });
+            }
+        });
+
+        function handleSurveyUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                    analyzeSurvey(jsonData);
+                } catch (err) {
+                    console.error(err);
+                    alert("ファイルの読み込みに失敗しました。正しいExcelファイルか確認してください。");
+                }
+            };
+            reader.onerror = function() {
+                alert("ファイルの読み込み中にエラーが発生しました。");
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function analyzeSurvey(surveyData) {
+            submittedEmails = new Set();
+            surveyData.forEach(row => {
+                Object.values(row).forEach(val => {
+                    if (typeof val === 'string' && val.includes('@')) {
+                        submittedEmails.add(val.trim().toLowerCase());
+                    }
+                });
+            });
+
+            // 集計完了
+            renderTabs();
+            renderTable(currentTab);
+            showView('viewResult');
+        }
+
+
+        // ------------------------------------------
+        // 描画関連
+        // ------------------------------------------
+
+        function renderTabs() {
+            const container = document.getElementById('tabContainer');
+            container.innerHTML = '';
+            
+            // 自動生成された sortedClassList を使用してタブを描画
+            sortedClassList.forEach(className => {
+                if (!classRosterMap[className]) return;
+
+                const btn = document.createElement('button');
+                btn.className = `tab-btn ${className === currentTab ? 'active' : ''}`;
+                btn.textContent = className;
+                btn.onclick = () => {
+                    currentTab = className;
+                    renderTabs();
+                    renderTable(className);
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderTable(className) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            const students = classRosterMap[className] || [];
+            let submittedCount = 0;
+
+            students.forEach(s => {
+                const isSubmitted = submittedEmails.has(String(s.email).trim().toLowerCase());
+                if (isSubmitted) submittedCount++;
+
+                const tr = document.createElement('tr');
+
+                const tdYear = document.createElement('td');
+                tdYear.textContent = s.year;
+
+                const tdClass = document.createElement('td');
+                tdClass.textContent = s.classNum;
+
+                const tdNo = document.createElement('td');
+                tdNo.textContent = s.no;
+
+                const tdName = document.createElement('td');
+                tdName.style.fontWeight = 'bold';
+                tdName.textContent = s.name;
+
+                const tdStatus = document.createElement('td');
+                const badge = document.createElement('span');
+                badge.className = `status-badge ${isSubmitted ? 'status-done' : 'status-yet'}`;
+                badge.textContent = isSubmitted ? '回答済み' : '未回答';
+                tdStatus.appendChild(badge);
+
+                const tdEmail = document.createElement('td');
+                tdEmail.style.color = '#666';
+                tdEmail.style.fontSize = '0.85rem';
+                tdEmail.textContent = s.email;
+
+                tr.append(tdYear, tdClass, tdNo, tdName, tdStatus, tdEmail);
+                tbody.appendChild(tr);
+            });
+
+            const rateDisplay = document.getElementById('rateDisplay');
+            if (students.length > 0) {
+                const percentage = Math.round((submittedCount / students.length) * 100);
+                rateDisplay.textContent = `${submittedCount} / ${students.length} 人 (${percentage}%)`;
+            } else {
+                rateDisplay.textContent = "-";
+            }
+        }
+
+        // ------------------------------------------
+        // 結果ダウンロード機能
+        // ------------------------------------------
+        function downloadResultXlsx() {
+            // データがない場合は中断
+            if (!currentRosterData.length) {
+                alert("出力するデータがありません。");
+                return;
+            }
+
+            // 新しいワークブックを作成
+            const wb = XLSX.utils.book_new();
+
+            // クラス順（タブの並び順）にシートを作成して追加
+            sortedClassList.forEach(className => {
+                const students = classRosterMap[className] || [];
+                
+                // シート用のデータ配列を作成（ヘッダー行 + データ行）
+                const sheetData = [
+                    ["年", "組", "番", "氏名", "メールアドレス", "回答状況"]
+                ];
+
+                students.forEach(s => {
+                    const isSubmitted = submittedEmails.has(String(s.email).trim().toLowerCase());
+                    sheetData.push([
+                        s.year,
+                        s.classNum,
+                        s.no,
+                        s.name,
+                        s.email,
+                        isSubmitted ? "回答済み" : "未回答"
+                    ]);
+                });
+
+                // 配列データからシートを作成
+                const ws = XLSX.utils.aoa_to_sheet(sheetData);
+                
+                // 列幅を少し見やすく調整
+                ws['!cols'] = [
+                    { wch: 5 },  // 年
+                    { wch: 5 },  // 組
+                    { wch: 5 },  // 番
+                    { wch: 15 }, // 氏名
+                    { wch: 35 }, // メールアドレス
+                    { wch: 10 }  // 回答状況
+                ];
+
+                // ワークブックにシートを追加（シート名をクラス名にする）
+                XLSX.utils.book_append_sheet(wb, ws, className);
+            });
+
+            // ファイルを書き出してダウンロード開始
+            // ファイル名に現在日時をつけると管理しやすくなります
+            const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,"");
+            XLSX.writeFile(wb, `アンケート集計結果_${dateStr}.xlsx`);
+        }
+    </script>
+</body>
+</html>
