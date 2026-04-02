@@ -297,6 +297,12 @@
                 ※列の並び順: [年, 組, 番号, 氏名, メールアドレス]</p>
             </div>
 
+            <div style="margin-bottom: 30px; padding: 20px; background: #f9fffb; border: 1px solid var(--primary-color); border-radius: 8px;">
+                <label style="font-weight:bold; display:block; margin-bottom:8px;">📥 現在の名簿をテンプレートとしてダウンロード:</label>
+                <p style="font-size:0.85rem; color:#666; margin:0 0 12px;">現在クラウドに登録されている名簿をExcelファイルとして書き出します。ダウンロードしたファイルを編集・追記し、下のアップロードで上書き更新できます。</p>
+                <button class="btn-save" style="background: var(--primary-dark);" onclick="downloadRosterTemplate()">テンプレートをダウンロード</button>
+            </div>
+
             <div class="file-input-wrapper">
                 <label style="font-weight:bold; display:block; margin-bottom:10px;">新しい名簿Excelファイル:</label>
                 <input type="file" id="rosterInput" accept=".xlsx, .xls">
@@ -439,6 +445,8 @@
         // 名簿配列をマップに変換 & クラスリスト自動生成
         function processRosterData(flatData) {
             classRosterMap = {};
+            // 9年9組を常に表示するクラスとして登録
+            classRosterMap["9年9組"] = [];
             flatData.forEach(student => {
                 const className = `${student.year}年${student.classNum}組`;
                 if (!classRosterMap[className]) classRosterMap[className] = [];
@@ -746,6 +754,45 @@
             } else {
                 rateDisplay.textContent = "-";
             }
+        }
+
+        // ------------------------------------------
+        // 名簿テンプレートダウンロード機能
+        // ------------------------------------------
+        function downloadRosterTemplate() {
+            const sheetData = [["年", "組", "番", "氏名", "メールアドレス"]];
+
+            if (currentRosterData.length > 0) {
+                // 現在の名簿データを書き出す（クラス・番号順）
+                const sorted = [...currentRosterData].sort((a, b) => {
+                    if (a.year !== b.year) return a.year - b.year;
+                    if (a.classNum !== b.classNum) return a.classNum - b.classNum;
+                    return a.no - b.no;
+                });
+                sorted.forEach(s => {
+                    sheetData.push([s.year, s.classNum, s.no, s.name, s.email]);
+                });
+            }
+            // 9年9組のデータがなければ空の雛形行を追加
+            const has9yo9kumi = currentRosterData.some(s => s.year == 9 && s.classNum == 9);
+            if (!has9yo9kumi) {
+                sheetData.push([9, 9, 1, "", ""]);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            ws['!cols'] = [
+                { wch: 5 },  // 年
+                { wch: 5 },  // 組
+                { wch: 5 },  // 番
+                { wch: 15 }, // 氏名
+                { wch: 35 }  // メールアドレス
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "名簿");
+
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            XLSX.writeFile(wb, `名簿テンプレート_${dateStr}.xlsx`);
         }
 
         // ------------------------------------------
